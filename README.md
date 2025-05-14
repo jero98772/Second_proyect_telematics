@@ -54,72 +54,116 @@ Initially deployed as two Docker containers (Python Flask + MySQL) using Docker 
 
 ---
 
-## Configuration Summary
+## ⚙️ Configuration Summary and Executed Steps
 
-### 1. EC2 Base Instance:
+This section summarizes all the configurations applied and steps executed to deploy and scale the BookStore application on AWS infrastructure, fulfilling Objectives 1 and 2 of the project.
 
-* Ubuntu 22.04 LTS
-* Installed Docker, Docker Compose, and NGINX
+### 1. EC2 Base Instance
+
+* OS: Ubuntu 22.04 LTS
+* Instance type: t2.micro
+* Installed: Docker, Docker Compose, NGINX, mysql-client, nfs-common
 * Security Group Inbound Rules:
 
-  * TCP 22 (SSH) – from trusted IP
-  * TCP 80 (HTTP) – from 0.0.0.0/0
-  * TCP 5000 (Flask direct)
-  * TCP 3306 (RDS)
+  * TCP 22 (SSH)
+  * TCP 80 (HTTP)
+  * TCP 5000 (Flask development)
+  * TCP 3306 (MySQL RDS)
   * TCP 2049 (EFS)
 
-### 2. Docker Application:
+### 2. Application Setup
 
-* docker-compose.yml with services:
+* BookStore app deployed with Docker Compose:
 
-  * flaskapp: Python + Flask + SQLAlchemy
-  * db: MySQL 8 (used only during local phase)
-* Flask configured to connect to RDS in production
+  * flaskapp (Flask + SQLAlchemy)
+  * db (MySQL 8, used only locally)
+* NGINX reverse proxy routes port 80 to Flask’s port 5000
+* Flask SQLAlchemy was configured to connect to RDS in production
 
-### 3. NGINX Reverse Proxy:
+### 3. Create AMI
 
-* Forward requests from port 80 to container on port 5000
+* From EC2 -> Instance -> Actions -> Create Image
+* Issue: initial IAM role denied AMI creation
+* Fix: permissions updated to allow creation.
 
-### 4. RDS:
+### 4. Create Launch Template
+
+* AMI: custom image created above
+* Instance type: t2.micro
+* Key pair: same as original
+* Network and Security Group: same as base EC2
+
+### 5. Create Auto Scaling Group
+
+* Minimum: 2 instances / Maximum: 4
+* Subnets: us-east-1a, 1e, 1f
+* Launch Template: selected
+* Load Balancer: created Application Load Balancer (ALB)
+* Target Group: created and attached
+* Listener: HTTP on port 80 -> forwards to target group
+
+### 6. Configure Amazon RDS 
 
 * Engine: MySQL 8.0
 * Instance type: db.t3.micro
-* Public access: Enabled
-* Database: bookstore
-* Connection from EC2 via private VPC or public IP 
-* SQLAlchemy connection string in Flask.
+* Public access: enabled 
+* Username: admin / Password: \ secure_password
+* Connected from EC2:
 
-  
-### 5. EFS:
+```bash
+mysql -h <rds-endpoint> -u admin -p
+CREATE DATABASE bookstore;
+EXIT;
+```
 
-* Created in same VPC and subnets as EC2s
-* Mount targets in 3 AZs
-* Mounted in all instances at /mnt/bookstore-efs
-* Tested with echo and cat
+* Flask app.py connection string:
 
-### 6. AMI:
+```python
+app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://admin:<pwd>@<endpoint>/bookstore'
+```
 
-* Image created from fully configured EC2
-* Includes app, Docker, NGINX, mounts, etc.
+* Restarted app with:
 
-### 7. Launch Template:
+```bash
+sudo docker-compose down
+sudo docker-compose up --build -d
+```
 
-* Based on AMI
-* Type: t2.micro
-* Key pair and SG same as original instance
+### 7. Create and Mount Amazon EFS
 
-### 8. Auto Scaling Group:
+* EFS created in the same VPC
+* Mount targets in subnets us-east-1a, 1e, and 1f
+* Security Group for EFS allowed TCP 2049 from EC2 SG or VPC CIDR
+* On EC2:
 
-* Min: 2, Max: 4
-* Subnets: 3 across us-east-1a, 1e, 1f
-* Health checks via ELB
-* Attached to ALB (Application Load Balancer)
+```bash
+sudo apt install -y nfs-common
+sudo mkdir /mnt/bookstore-efs
+sudo mount -t nfs4 -o nfsvers=4.1 <efs-dns>:/ /mnt/bookstore-efs
+```
 
-### 9. Application Load Balancer:
+* Test:
 
-* Listener on port 80
-* Forward to target group attached to ASG instances
-* DNS used to access live service
+```bash
+df -h | grep efs
+echo "EFS OK!" | sudo tee /mnt/bookstore-efs/test.txt
+cat /mnt/bookstore-efs/test.txt
+```
+
+### 8. Custom Domain Integration (salchicha.space)
+
+* Domain registered via Namecheap
+* Attempted to use Route 53, but IAM policy denied:
+
+  * route53\:CreateHostedZone
+  * acm\:RequestCertificate
+* Used Cloudflare for DNS and SSL proxy:
+
+  * Configured Cloudflare nameservers in Namecheap
+  * CNAME record: [www.salchicha.space](http://www.salchicha.space) -> bookstore-alb-xxxxxx.us-east-1.elb.amazonaws.com
+  * Enabled Full SSL mode and “Always Use HTTPS”
+
+Due to subsequent IAM restrictions in the lab environment, access to EC2, Target Groups, and Load Balancer was lost. This prevented final Cloudflare validation (error 521: connection refused).
 
 ---
 
