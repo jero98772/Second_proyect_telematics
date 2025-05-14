@@ -64,9 +64,9 @@ Initially deployed as two Docker containers (Python Flask + MySQL) using Docker 
 
   * TCP 22 (SSH) – from trusted IP
   * TCP 80 (HTTP) – from 0.0.0.0/0
-  * TCP 5000 (Flask direct, optional)
-  * TCP 3306 (RDS, restricted by CIDR or SG)
-  * TCP 2049 (EFS, restricted by CIDR or SG)
+  * TCP 5000 (Flask direct)
+  * TCP 3306 (RDS)
+  * TCP 2049 (EFS)
 
 ### 2. Docker Application:
 
@@ -79,7 +79,6 @@ Initially deployed as two Docker containers (Python Flask + MySQL) using Docker 
 ### 3. NGINX Reverse Proxy:
 
 * Forward requests from port 80 to container on port 5000
-* Configured under /etc/nginx/sites-available/bookstore
 
 ### 4. RDS:
 
@@ -87,11 +86,10 @@ Initially deployed as two Docker containers (Python Flask + MySQL) using Docker 
 * Instance type: db.t3.micro
 * Public access: Enabled
 * Database: bookstore
-* Connection from EC2 via private VPC or public IP (for testing)
-* SQLAlchemy connection string in Flask:
+* Connection from EC2 via private VPC or public IP 
+* SQLAlchemy connection string in Flask.
 
-  'mysql+pymysql://admin\:your\_password\@bookstore-db.rds.amazonaws.com/bookstore'
-
+  
 ### 5. EFS:
 
 * Created in same VPC and subnets as EC2s
