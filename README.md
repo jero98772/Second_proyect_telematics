@@ -1,3 +1,8 @@
+# Members:
+- Felipe Uribe Correa
+- Laura Danniela Zárate Guerrero
+- Victor Daniela Arango Sohm
+
 # BookStore AWS Deployment
 
 This project demonstrates a scalable deployment of a monolithic Python Flask application using AWS infrastructure, including:
